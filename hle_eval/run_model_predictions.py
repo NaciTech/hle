@@ -50,11 +50,38 @@ async def attempt_question(question):
     return question["id"], content, tokens
 
 
+async def attempt_question_responses(question):
+    content = [dict(type="input_text", text=question['question'])]
+    if question['image']:
+        content.append(dict(type="input_image", image_url=question['image']))
+    try:
+        kwargs = dict(
+            model=args.model,
+            instructions=SYSTEM_PROMPT,
+            input=[{"role": "user", "content": content}],
+            stream=False,
+        )
+        if args.max_completion_tokens is not None:
+            kwargs["max_output_tokens"] = args.max_completion_tokens
+        response = await client.responses.create(**kwargs)
+        text = response.output_text
+        tokens = json.loads(response.usage.json())
+    except Exception as e:
+        print("Error:", e)
+        return None
+
+    if text is None:
+        return None
+
+    return question["id"], text, tokens
+
+
 async def attempt_all(questions):
     async def bound_func(question):
         async with semaphore:
-            content = await attempt_question(question)
-            return content
+            if args.api == "responses":
+                return await attempt_question_responses(question)
+            return await attempt_question(question)
             
     semaphore = asyncio.Semaphore(args.num_workers)
     async with semaphore:
@@ -106,6 +133,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", type=str, help="HLE HF Dataset")
     parser.add_argument("--model", type=str, help="Model Endpoint Name")
+    parser.add_argument("--api", type=str, choices=["chat_completions", "responses"], default="chat_completions", help="API: chat_completions or responses")
     parser.add_argument("--max_completion_tokens", type=int, default=None, help="Limit completion tokens. Recommended to avoid model collapse.")
     parser.add_argument("--temperature", type=float, default=0.0, help="Temperature for sampling.")
     parser.add_argument("--num_workers", type=int, default=10, help="Async semaphore size. This depends on your rate limit.")
