@@ -124,10 +124,8 @@ def main(args):
             "response": response,
             "usage": usage
         }
-
-    # cache responses
-    with open(output_filepath, "w") as f:
-        json.dump(predictions, f, indent=4)
+        with open(output_filepath, "w") as f:
+            json.dump(predictions, f, indent=4)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
