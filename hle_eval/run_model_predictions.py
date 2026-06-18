@@ -88,13 +88,30 @@ async def attempt_question_responses(question):
     return question["id"], text, tokens
 
 
-async def attempt_all(questions):
+async def attempt_all(questions, predictions, output_filepath):
+    write_lock = asyncio.Lock()
+
+    async def save_prediction(unique_id, response, usage):
+        predictions[unique_id] = {
+            "model": args.model,
+            "response": response,
+            "usage": usage,
+        }
+        async with write_lock:
+            with open(output_filepath, "w") as f:
+                json.dump(predictions, f, indent=4)
+
     async def bound_func(question):
         async with semaphore:
             if args.api == "responses":
-                return await attempt_question_responses(question)
-            return await attempt_question(question)
-            
+                result = await attempt_question_responses(question)
+            else:
+                result = await attempt_question(question)
+            if result is not None:
+                unique_id, response, usage = result
+                await save_prediction(unique_id, response, usage)
+            return result
+
     semaphore = asyncio.Semaphore(args.num_workers)
     async with semaphore:
         tasks = [bound_func(q) for q in questions]
@@ -124,20 +141,10 @@ def main(args):
     else:
         predictions = {}
 
-    results = asyncio.run(attempt_all(questions))
+    with open(output_filepath, "w") as f:
+        json.dump(predictions, f, indent=4)
 
-    # You can rerun this script multiple times if there are failed API calls
-    for result in results:
-        if result is None: # API call failed
-            continue
-        unique_id, response, usage = result
-        predictions[unique_id] = {
-            "model": args.model,
-            "response": response,
-            "usage": usage
-        }
-        with open(output_filepath, "w") as f:
-            json.dump(predictions, f, indent=4)
+    asyncio.run(attempt_all(questions, predictions, output_filepath))
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
