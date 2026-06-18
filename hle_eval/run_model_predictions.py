@@ -51,14 +51,13 @@ async def attempt_question(question):
 
 
 async def attempt_question_responses(question):
-    content = [dict(type="input_text", text=question['question'])]
+    content = [dict(type="input_text", text=f"{SYSTEM_PROMPT}\n\n{question['question']}")]
     if question['image']:
         content.append(dict(type="input_image", image_url=question['image']))
     try:
         kwargs = dict(
             model=args.model,
-            instructions=SYSTEM_PROMPT,
-            input=[{"role": "user", "content": content}],
+            input=content,
             stream=False,
         )
         if args.max_completion_tokens is not None:
